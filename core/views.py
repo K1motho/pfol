@@ -85,7 +85,7 @@ class WishlistEventViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return WishlistEvent.objects.filter(user=self.request.user).order_by('-added_at')
+        return WishListEvent.objects.filter(user=self.request.user).order_by('-added_at')
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
