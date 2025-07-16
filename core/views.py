@@ -1,12 +1,11 @@
 from rest_framework import generics, permissions, status, views, viewsets
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.decorators import action
 from django.shortcuts import get_object_or_404
 from django.db import models
 
-from .models import FriendRequest, Friendship, WishlistEvent, AttendedEvent, Message, Notification
+from .models import FriendRequest, Friendship, WishListEvent, AttendedEvent, Message, Notification
 from .serializers import (
     UserSerializer, RegisterSerializer, FriendRequestSerializer, FriendshipSerializer,
     WishlistEventSerializer, AttendedEventSerializer, MessageSerializer, NotificationSerializer
@@ -47,8 +46,13 @@ class FriendRequestViewSet(viewsets.ModelViewSet):
         friend_request = get_object_or_404(FriendRequest, pk=pk, receiver=request.user)
         if friend_request.status != 'pending':
             return Response({'detail': 'Request already processed'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if Friendship.objects.filter(user1=friend_request.sender, user2=friend_request.receiver).exists():
+            return Response({'detail': 'Already friends'}, status=status.HTTP_400_BAD_REQUEST)
+
         friend_request.status = 'accepted'
         friend_request.save()
+
         # Create friendship both ways
         Friendship.objects.create(user1=friend_request.sender, user2=friend_request.receiver)
         Friendship.objects.create(user1=friend_request.receiver, user2=friend_request.sender)
@@ -107,8 +111,11 @@ class ChatMessageViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         friend_id = self.request.query_params.get('friend_id')
-        if not friend_id:
+        try:
+            friend_id = int(friend_id)
+        except (TypeError, ValueError):
             return Message.objects.none()
+
         return Message.objects.filter(
             (models.Q(sender=user) & models.Q(receiver_id=friend_id)) |
             (models.Q(sender_id=friend_id) & models.Q(receiver=user))

@@ -76,7 +76,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'pfol.wsgi.application'
-ASGI_APPLICATION = 'eventsite.asgi.application'
+ASGI_APPLICATION = 'pfol.asgi.application'
 
 
 # Database
@@ -84,7 +84,7 @@ ASGI_APPLICATION = 'eventsite.asgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
         'NAME': config('DB_NAME'),
         'USER': config('DB_USER'),
         'PASSWORD': config('DB_PASSWORD'),
@@ -156,9 +156,9 @@ SIMPLE_JWT = {
 CORS_ALLOW_ALL_ORIGINS = True
 
 CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': 'dtdnww7og',
-    'API_KEY': '192324438835342',
-    'API_SECRET': 'oth10GPAvRrBnf8FeL2SepIi2_U',
+    'CLOUD_NAME': config('CLOUD_NAME'),
+    'API_KEY': config('API_KEY'),
+    'API_SECRET': config('API_SECRET'),
 }
 
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
