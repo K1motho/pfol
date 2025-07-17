@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import FriendRequest, Friendship, WishListEvent, AttendedEvent, Message, Notification
+from .models import FriendRequest, Friendship, WishListEvent, AttendedEvent, Message, Notification , Event
 
 User = get_user_model()
 
@@ -66,3 +66,20 @@ class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
         fields = ['id', 'type', 'content', 'is_read', 'timestamp']
+
+class EventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Event
+        fields = [
+            'id',
+            'title',
+            'description',
+            'date',
+            'location',
+            'image',
+            'is_public',
+            'ticket_price',
+            'created_by',
+            'created_at'
+        ]
+        read_only_fields = ['id', 'created_by', 'created_at']

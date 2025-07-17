@@ -1,14 +1,16 @@
 from rest_framework import generics, permissions, status, views, viewsets
 from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
 from django.contrib.auth import get_user_model
 from rest_framework.decorators import action
 from django.shortcuts import get_object_or_404
 from django.db import models
+from rest_framework.views import APIView
 
-from .models import FriendRequest, Friendship, WishListEvent, AttendedEvent, Message, Notification
+from .models import FriendRequest, Friendship, WishListEvent, AttendedEvent, Message, Notification, Event
 from .serializers import (
     UserSerializer, RegisterSerializer, FriendRequestSerializer, FriendshipSerializer,
-    WishlistEventSerializer, AttendedEventSerializer, MessageSerializer, NotificationSerializer
+    WishlistEventSerializer, AttendedEventSerializer, MessageSerializer, NotificationSerializer, EventSerializer
 )
 
 User = get_user_model()
@@ -142,3 +144,11 @@ class NotificationMarkReadView(views.APIView):
         notification.is_read = True
         notification.save()
         return Response({'detail': 'Notification marked as read.'}, status=status.HTTP_200_OK)
+
+class DiscoverEventsAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        events = Event.objects.filter(is_public=True).order_by('-created_at')[:10]
+        serializer = EventSerializer(events, many=True)
+        return Response(serializer.data)
