@@ -7,6 +7,13 @@ from django.shortcuts import get_object_or_404
 from django.db import models
 from rest_framework.views import APIView
 
+from decouple import config
+
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
+from rest_framework.authtoken.models import Token
+
 from .models import FriendRequest, Friendship, WishListEvent, AttendedEvent, Message, Notification, Event
 from .serializers import (
     UserSerializer, RegisterSerializer, FriendRequestSerializer, FriendshipSerializer,
@@ -145,6 +152,7 @@ class NotificationMarkReadView(views.APIView):
         notification.save()
         return Response({'detail': 'Notification marked as read.'}, status=status.HTTP_200_OK)
 
+
 class DiscoverEventsAPIView(APIView):
     permission_classes = [AllowAny]
 
@@ -152,3 +160,40 @@ class DiscoverEventsAPIView(APIView):
         events = Event.objects.filter(is_public=True).order_by('-created_at')[:10]
         serializer = EventSerializer(events, many=True)
         return Response(serializer.data)
+
+
+# --- Google OAuth Login View ---
+class GoogleAuthView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        token = request.data.get('token')
+        if not token:
+            return Response({'detail': 'Token is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            CLIENT_ID = config('GOOGLE_CLIENT_ID')
+
+            idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), CLIENT_ID)
+
+            email = idinfo.get('email')
+            name = idinfo.get('name')
+
+            if not email:
+                return Response({'detail': 'Google token missing email'}, status=status.HTTP_400_BAD_REQUEST)
+
+            user, created = User.objects.get_or_create(email=email, defaults={'username': email.split('@')[0]})
+
+            token_obj, _ = Token.objects.get_or_create(user=user)
+
+            return Response({
+                'token': token_obj.key,
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                }
+            })
+
+        except ValueError:
+            return Response({'detail': 'Invalid Google token'}, status=status.HTTP_400_BAD_REQUEST)

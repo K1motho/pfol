@@ -1,13 +1,14 @@
 from django.urls import path
-from . import views
-from .views import UserTransactionsView
+from .views import (
+    StripeCreatePaymentIntentView,
+    InitiateStkPushView,
+    MpesaCallbackView,
+    UserTransactionsView,
+)
 
 urlpatterns = [
-    path('payment/checkout/', views.checkout_view, name='checkout'),
-    path('payment/initiate_stk_push/', views.initiate_stk_push, name='initiate_stk_push'),
-    path('payment/payments/callback/', views.mpesa_callback, name='mpesa_callback'),
-    path('payment/process_payment/', views.process_payment),
-    path('payment/create_payment/', views.create_payment),
+    path('payment/create-payment-intent/', StripeCreatePaymentIntentView.as_view(), name='create-payment-intent'),
+    path('payment/initiate-stk-push/', InitiateStkPushView.as_view(), name='initiate-stk-push'),
+    path('payment/mpesa-callback/', MpesaCallbackView.as_view(), name='mpesa-callback'),
     path('payment/user-transactions/', UserTransactionsView.as_view(), name='user-transactions'),
-
 ]
