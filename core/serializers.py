@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import FriendRequest, Friendship, WishListEvent, AttendedEvent, Message, Notification , Event
+from .models import FriendRequest, Friendship, WishListEvent, AttendedEvent, Message, Notification, Event
 
 User = get_user_model()
 
@@ -9,6 +9,13 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username', 'email', 'profile_pic', 'bio']
 
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        if instance.profile_pic and hasattr(instance.profile_pic, 'url'):
+            rep['avatar'] = instance.profile_pic.url
+        else:
+            rep['avatar'] = None
+        return rep
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -25,7 +32,6 @@ class RegisterSerializer(serializers.ModelSerializer):
         )
         return user
 
-
 class FriendRequestSerializer(serializers.ModelSerializer):
     sender = UserSerializer(read_only=True)
     receiver = UserSerializer(read_only=True)
@@ -33,7 +39,6 @@ class FriendRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = FriendRequest
         fields = ['id', 'sender', 'receiver', 'status', 'created_at']
-
 
 class FriendshipSerializer(serializers.ModelSerializer):
     user1 = UserSerializer(read_only=True)
@@ -43,24 +48,20 @@ class FriendshipSerializer(serializers.ModelSerializer):
         model = Friendship
         fields = ['id', 'user1', 'user2', 'created_at']
 
-
 class WishlistEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = WishListEvent
         fields = ['id', 'event_id', 'title', 'date', 'image_url', 'added_at']
-
 
 class AttendedEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = AttendedEvent
         fields = ['id', 'event_id', 'title', 'date', 'image_url', 'attended_at']
 
-
 class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = ['id', 'sender', 'receiver', 'content', 'timestamp', 'is_read']
-
 
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -83,3 +84,24 @@ class EventSerializer(serializers.ModelSerializer):
             'created_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_at']
+
+class FriendEventSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    name = serializers.CharField()
+    date = serializers.CharField()
+    image_url = serializers.CharField()
+
+class FriendProfileSerializer(serializers.ModelSerializer):
+    mutual_events = AttendedEventSerializer(many=True)
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'avatar', 'mutual_events']
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        if instance.profile_pic and hasattr(instance.profile_pic, 'url'):
+            rep['avatar'] = instance.profile_pic.url
+        else:
+            rep['avatar'] = None
+        return rep

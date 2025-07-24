@@ -1,20 +1,36 @@
-from django.urls import path, include 
-from rest_framework.routers import DefaultRouter
-from .views import FriendRequestViewSet, WishlistEventViewSet, AttendedEventViewSet, ChatMessageViewSet, RegisterView, UserProfileView, FriendsListView, NotificationListView, NotificationMarkReadView, DiscoverEventsAPIView, GoogleAuthView
-
-router = DefaultRouter()
-router.register(r'friend-requests', FriendRequestViewSet, basename='friend-requests')
-router.register(r'wishlist-events', WishlistEventViewSet, basename='wishlist-events')
-router.register(r'attended-events', AttendedEventViewSet, basename='attended-events')
-router.register(r'messages', ChatMessageViewSet, basename='chat-messages')
+from django.urls import path, include
+from .views import (
+    DiscoverEventsAPIView,
+    GoogleAuthView,
+    RegisterView,
+    CheckUsernameView,
+    CheckEmailView,
+    UserProfileView,
+    FriendListAPIView,
+    FriendEventsAPIView,
+    FriendProfileAPIView,
+    MessageListCreateAPIView,
+    NotificationsView
+)
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
 
 urlpatterns = [
+    path('events/discover/', DiscoverEventsAPIView.as_view(), name='discover-events'),
+    path('auth/google/', GoogleAuthView.as_view(), name='google-auth'),
     path('auth/register/', RegisterView.as_view(), name='register'),
-    path('auth/profile/', UserProfileView.as_view(), name='profile'),
-    path('friends/', FriendsListView.as_view(), name='friend-list'),
-    path('notifications/', NotificationListView.as_view(), name='notification-list'),
-    path('notifications/<int:pk>/read/', NotificationMarkReadView.as_view(), name='notification-read'),
-     path('api/events/discover/', DiscoverEventsAPIView.as_view(), name='discover-events'),
-      path('auth/google/', GoogleAuthView.as_view(), name='google-auth'),
-    path('', include(router.urls)),
+    path('auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('auth/check-username', CheckUsernameView.as_view(), name='check-username'),
+    path('auth/check-email', CheckEmailView.as_view(), name='check-email'),
+    path('profile/', UserProfileView.as_view(), name='user-profile'),
+
+    # ✅ New friend-related endpoints:
+    path('friends/', FriendListAPIView.as_view(), name='friend-list'),
+    path('friend-events/', FriendEventsAPIView.as_view(), name='friend-events'),
+    path('friends/<int:friend_id>/', FriendProfileAPIView.as_view(), name='friend-profile'),
+     path('api/messages/<int:friend_id>/', MessageListCreateAPIView.as_view(), name='messages'),
+     path('notifications/', NotificationsView.as_view(), name='notifications'),
 ]
