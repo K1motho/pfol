@@ -10,7 +10,8 @@ from .views import (
     FriendEventsAPIView,
     FriendProfileAPIView,
     MessageListCreateAPIView,
-    NotificationsView
+    NotificationsView,
+    ForgotPasswordView, ResetPasswordView
 )
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
@@ -33,4 +34,9 @@ urlpatterns = [
     path('friends/<int:friend_id>/', FriendProfileAPIView.as_view(), name='friend-profile'),
      path('api/messages/<int:friend_id>/', MessageListCreateAPIView.as_view(), name='messages'),
      path('notifications/', NotificationsView.as_view(), name='notifications'),
+
+     #password reset
+     path('forgot-password/', ForgotPasswordView.as_view(), name='forgot-password'),
+     path('reset-password/<uidb64>/<token>/', ResetPasswordView.as_view(), name='reset-password')
+
 ]
