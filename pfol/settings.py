@@ -15,6 +15,7 @@ from decouple import config
 from pathlib import Path
 from datetime import timedelta
 import cloudinary
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -98,6 +99,9 @@ DATABASES = {
     }
 }
 
+# DATABASES = {
+#     'default' :dj_database_url.parse(config('DATABASE_URL'))
+# }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
