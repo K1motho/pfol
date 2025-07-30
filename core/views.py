@@ -3,21 +3,31 @@ from decouple import config
 from rest_framework import generics, permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes
-from django.urls import reverse
+from django.shortcuts import get_object_or_404
+from django.db.models import Q
 
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
-from .serializers import RegisterSerializer, UserSerializer, FriendEventSerializer, MessageSerializer, NotificationSerializer
-from .models import User, Friendship, AttendedEvent, Message, Notification
+from .serializers import (
+    RegisterSerializer,
+    UserSerializer,
+    FriendEventSerializer,
+    FriendRequestSerializer,
+    MessageSerializer,
+    NotificationSerializer,
+    InvitationSerializer,
+    AttendedEventSerializer, CustomTokenObtainPairSerializer
+)
+from .models import User, Friendship, FriendRequest, AttendedEvent, Message, Notification, Invitation
 from .utils import send_otp_email
-from django.db.models import Q
 
 User = get_user_model()
 
@@ -34,24 +44,21 @@ class ForgotPasswordView(APIView):
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
-            # Generic response for both existing and non-existing emails
             return Response({"message": "If an account with that email exists, a reset link has been sent."})
 
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
-
-        frontend_url = config('FRONT_END_URL')  # e.g., http://localhost:5173
-        reset_url = f"{frontend_url}/reset-password/{uid}/{token}/"  # <-- Include uid and token here!
+        frontend_url = config('FRONT_END_URL')
+        reset_url = f"{frontend_url}/reset-password/{uid}/{token}/"
 
         send_mail(
             subject="Wapi Na Lini Password Reset",
             message=f"Hello,\n\nTo reset your password, click the link below:\n\n{reset_url}\n\nIf you didn't request this, ignore this email.",
-            from_email=None,  # Uses DEFAULT_FROM_EMAIL
+            from_email=None,
             recipient_list=[user.email],
         )
 
         return Response({"message": "If an account with that email exists, a reset link has been sent."})
-
 
 
 class ResetPasswordView(APIView):
@@ -59,7 +66,6 @@ class ResetPasswordView(APIView):
 
     def post(self, request, uidb64, token):
         password = request.data.get("password")
-
         if not password:
             return Response({"error": "Password is required."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -76,10 +82,11 @@ class ResetPasswordView(APIView):
         user.save()
         return Response({"message": "Password has been reset successfully."})
 
-# ------------------- Existing Views (unchanged) ----------------------
+# ------------------- Event Discovery ----------------------
 
 class DiscoverEventsAPIView(APIView):
     permission_classes = [AllowAny]
+
     def get(self, request):
         keyword = request.query_params.get("keyword", "music")
         location = request.query_params.get("location", "Nairobi")
@@ -97,9 +104,11 @@ class DiscoverEventsAPIView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
+# ------------------- Authentication and Registration ----------------------
 
 class GoogleAuthView(APIView):
     permission_classes = [AllowAny]
+
     def post(self, request):
         token = request.data.get('token')
         if not token:
@@ -129,9 +138,13 @@ class RegisterView(generics.CreateAPIView):
     def perform_create(self, serializer):
         serializer.save()
 
+class LoginView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+    permission_classes = [permissions.AllowAny]
 
 class CheckUsernameView(APIView):
     permission_classes = [AllowAny]
+
     def get(self, request):
         username = request.query_params.get('username', '').strip()
         if not username:
@@ -139,22 +152,30 @@ class CheckUsernameView(APIView):
         is_available = not User.objects.filter(username=username).exists()
         return Response({'available': is_available})
 
-
 class CheckEmailView(APIView):
     permission_classes = [AllowAny]
+
     def get(self, request):
+        print("✅ CheckEmailView accessed")
         email = request.query_params.get('email', '').strip()
         if not email:
+            print("❌ No email provided")
             return Response({'available': False, 'error': 'No email provided'}, status=400)
         is_available = not User.objects.filter(email=email).exists()
+        print(f"📧 Email checked: {email} | Available: {is_available}")
+
+
         return Response({'available': is_available})
 
+# ------------------- User Profile ----------------------
 
 class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
+
     def get(self, request):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
+
     def put(self, request):
         serializer = UserSerializer(request.user, data=request.data, partial=True)
         if serializer.is_valid():
@@ -162,9 +183,128 @@ class UserProfileView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+# ------------------- User Search ----------------------
+
+class UserSearchView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        query = request.query_params.get('q', '')
+        users = User.objects.filter(
+            Q(username__icontains=query) | Q(email__icontains=query)
+        ).exclude(id=request.user.id)
+        serializer = UserSerializer(users, many=True)
+        return Response(serializer.data)
+
+# ------------------- Friend Requests ----------------------
+
+class SendFriendRequestView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        receiver_id = request.data.get('receiver')
+        if not receiver_id:
+            return Response({'error': 'Receiver ID is required'}, status=400)
+
+        if int(receiver_id) == request.user.id:
+            return Response({'error': 'You cannot send a friend request to yourself'}, status=400)
+
+        try:
+            receiver = User.objects.get(id=receiver_id)
+        except User.DoesNotExist:
+            return Response({'error': 'Receiver not found'}, status=404)
+
+        if FriendRequest.objects.filter(sender=request.user, receiver=receiver, status='pending').exists():
+            return Response({'error': 'Friend request already sent'}, status=400)
+
+        friend_request = FriendRequest.objects.create(
+            sender=request.user,
+            receiver=receiver,
+            status='pending'
+        )
+
+        # ✅ Create a notification for the receiver
+        Notification.objects.create(
+            user=receiver,
+            type='friend_request',
+            content=f"{request.user.username} sent you a friend request."
+        )
+
+        serializer = FriendRequestSerializer(friend_request)
+        return Response(serializer.data, status=201)
+
+    def delete(self, request, receiver_id=None):
+        if not receiver_id:
+            return Response({'error': 'Receiver ID is required in the URL'}, status=400)
+
+        try:
+            friend_request = FriendRequest.objects.get(
+                sender=request.user,
+                receiver__id=receiver_id,
+                status='pending'
+            )
+            friend_request.delete()
+            return Response({'message': 'Friend request canceled'}, status=200)
+        except FriendRequest.DoesNotExist:
+            return Response({'error': 'No pending request to cancel'}, status=404)
+        
+class AcceptFriendRequestView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        sender_id = request.data.get('sender_id')
+        if not sender_id:
+            return Response({'error': 'Sender ID is required'}, status=400)
+
+        try:
+            friend_request = FriendRequest.objects.get(
+                sender__id=sender_id,
+                receiver=request.user,
+                status='pending'
+            )
+        except FriendRequest.DoesNotExist:
+            return Response({'error': 'Friend request not found'}, status=404)
+
+        friend_request.status = 'accepted'
+        friend_request.save()
+
+        # Optionally create reverse relationship or friendship object
+        Notification.objects.create(
+            user=friend_request.sender,
+            type='friend_request_accepted',
+            content=f"{request.user.username} accepted your friend request."
+        )
+
+        return Response({'message': 'Friend request accepted'}, status=200)
+
+
+class RejectFriendRequestView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        sender_id = request.data.get('sender_id')
+        if not sender_id:
+            return Response({'error': 'Sender ID is required'}, status=400)
+
+        try:
+            friend_request = FriendRequest.objects.get(
+                sender__id=sender_id,
+                receiver=request.user,
+                status='pending'
+            )
+        except FriendRequest.DoesNotExist:
+            return Response({'error': 'Friend request not found'}, status=404)
+
+        friend_request.status = 'rejected'
+        friend_request.save()
+
+        return Response({'message': 'Friend request rejected'}, status=200)
+
+# ------------------- Friends and Invitations ----------------------
 
 class FriendListAPIView(APIView):
     permission_classes = [IsAuthenticated]
+
     def get(self, request):
         user = request.user
         friendships = Friendship.objects.filter(Q(user1=user) | Q(user2=user))
@@ -172,9 +312,9 @@ class FriendListAPIView(APIView):
         serializer = UserSerializer(friends, many=True)
         return Response(serializer.data)
 
-
 class FriendEventsAPIView(APIView):
     permission_classes = [IsAuthenticated]
+
     def get(self, request):
         user = request.user
         friendships = Friendship.objects.filter(Q(user1=user) | Q(user2=user))
@@ -189,20 +329,23 @@ class FriendEventsAPIView(APIView):
         serializer = FriendEventSerializer(data, many=True)
         return Response(serializer.data)
 
-
 class FriendProfileAPIView(APIView):
     permission_classes = [IsAuthenticated]
+
     def get(self, request, friend_id):
         user = request.user
         try:
             friend = User.objects.get(id=friend_id)
         except User.DoesNotExist:
             return Response({"error": "Friend not found."}, status=404)
+
         is_friend = Friendship.objects.filter(
             (Q(user1=user) & Q(user2=friend)) | (Q(user1=friend) & Q(user2=user))
         ).exists()
+
         if not is_friend:
             return Response({"error": "Not friends."}, status=403)
+
         user_event_ids = set(
             AttendedEvent.objects.filter(user=user).values_list('event_id', flat=True)
         )
@@ -213,27 +356,34 @@ class FriendProfileAPIView(APIView):
             "date": e.date,
             "image_url": e.image_url
         } for e in friend_events]
+
         data = UserSerializer(friend).data
         data['mutual_events'] = mutual
         return Response(data)
 
+# ------------------- Messages ----------------------
 
 class MessageListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
+
     def get(self, request, friend_id):
         user = request.user
         try:
             friend = User.objects.get(id=friend_id)
         except User.DoesNotExist:
             return Response({"error": "Friend not found"}, status=404)
+
         is_friend = Friendship.objects.filter(
             (Q(user1=user) & Q(user2=friend)) | (Q(user1=friend) & Q(user2=user))
         ).exists()
+
         if not is_friend:
             return Response({"error": "Not friends."}, status=403)
+
         messages = Message.objects.filter(
             (Q(sender=user) & Q(receiver=friend)) | (Q(sender=friend) & Q(receiver=user))
         ).order_by('timestamp')
+
         serializer = MessageSerializer(messages, many=True)
         return Response(serializer.data)
 
@@ -243,23 +393,116 @@ class MessageListCreateAPIView(APIView):
             friend = User.objects.get(id=friend_id)
         except User.DoesNotExist:
             return Response({"error": "Friend not found"}, status=404)
+
         is_friend = Friendship.objects.filter(
             (Q(user1=user) & Q(user2=friend)) | (Q(user1=friend) & Q(user2=user))
         ).exists()
+
         if not is_friend:
             return Response({"error": "Not friends."}, status=403)
+
         content = request.data.get('content')
         if not content:
             return Response({"error": "Message content is required."}, status=400)
+
         message = Message.objects.create(sender=user, receiver=friend, content=content)
         serializer = MessageSerializer(message)
         return Response(serializer.data, status=201)
 
+# ------------------- Notifications ----------------------
 
 class NotificationsView(APIView):
     permission_classes = [IsAuthenticated]
+
     def get(self, request):
         user = request.user
         notifications = Notification.objects.filter(user=user).order_by('-timestamp')
         serializer = NotificationSerializer(notifications, many=True)
         return Response(serializer.data)
+    
+class MarkAllNotificationsReadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        Notification.objects.filter(user=user, is_read=False).update(is_read=True)
+        return Response({"message": "All notifications marked as read."}, status=status.HTTP_200_OK) 
+
+# ------------------- Invitations (QR) ----------------------
+
+class InvitationListView(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = InvitationSerializer
+
+    def get_queryset(self):
+        return Invitation.objects.filter(sender=self.request.user, status='pending').order_by('-created_at')
+
+class InvitationUpdateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, invitation_id):
+        invitation = get_object_or_404(Invitation, id=invitation_id, receiver=request.user, status='pending')
+        serializer = InvitationSerializer(invitation)
+        return Response(serializer.data)
+
+    def patch(self, request, invitation_id):
+        action = request.data.get('action')
+        invitation = get_object_or_404(Invitation, id=invitation_id, receiver=request.user)
+
+        if action not in ['accept', 'ignore']:
+            return Response({'detail': 'Invalid action.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if invitation.status != 'pending':
+            return Response({'detail': 'Invitation already responded to.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if action == 'accept':
+            invitation.status = 'accepted'
+            Friendship.objects.create(user1=invitation.sender, user2=invitation.receiver)
+        else:
+            invitation.status = 'ignored'
+
+        invitation.save()
+        serializer = InvitationSerializer(invitation)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class InvitationCreateView(generics.CreateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = InvitationSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(sender=self.request.user)
+
+# ------------------- Attended Events ----------------------
+
+class AttendedEventCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        data = request.data.copy()
+        serializer = AttendedEventSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save(user=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# ------------------- Friendship Removal (Unfriend) ----------------------
+
+class FriendDeleteAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, friend_id):
+        user = request.user
+        try:
+            friend = User.objects.get(id=friend_id)
+        except User.DoesNotExist:
+            return Response({"error": "Friend not found"}, status=404)
+
+        friendship = Friendship.objects.filter(
+            (Q(user1=user) & Q(user2=friend)) | (Q(user1=friend) & Q(user2=user))
+        ).first()
+
+        if not friendship:
+            return Response({"error": "Not friends"}, status=400)
+
+        friendship.delete()
+        return Response({"message": "Friend removed"}, status=204)
