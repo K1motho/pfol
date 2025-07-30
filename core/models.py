@@ -71,15 +71,15 @@ class Message(models.Model):
 
 
 class Notification(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    recipient = models.ForeignKey(User, related_name="notifications", on_delete=models.CASCADE)
+    sender = models.ForeignKey(User, related_name="sent_notifications", on_delete=models.SET_NULL, null=True, blank=True)
     type = models.CharField(max_length=50)
     content = models.TextField()
     is_read = models.BooleanField(default=False)
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Notification for {self.user}: {self.type}"
-    
+        return f"{self.type} for {self.recipient} from {self.sender}"
 
 class Event(models.Model):
     title = models.CharField(max_length=200)

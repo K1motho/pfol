@@ -201,6 +201,12 @@ class UserSearchView(APIView):
 class SendFriendRequestView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def get(self, request):
+        # Return list of friend requests sent by the current user
+        friend_requests = FriendRequest.objects.filter(sender=request.user, status='pending')
+        serializer = FriendRequestSerializer(friend_requests, many=True)
+        return Response(serializer.data)
+    
     def post(self, request):
         receiver_id = request.data.get('receiver')
         if not receiver_id:
@@ -225,7 +231,8 @@ class SendFriendRequestView(APIView):
 
         # ✅ Create a notification for the receiver
         Notification.objects.create(
-            user=receiver,
+            recipient=receiver,
+            sender=request.user,
             type='friend_request',
             content=f"{request.user.username} sent you a friend request."
         )
@@ -247,6 +254,7 @@ class SendFriendRequestView(APIView):
             return Response({'message': 'Friend request canceled'}, status=200)
         except FriendRequest.DoesNotExist:
             return Response({'error': 'No pending request to cancel'}, status=404)
+
         
 class AcceptFriendRequestView(APIView):
     permission_classes = [IsAuthenticated]
@@ -416,18 +424,17 @@ class NotificationsView(APIView):
 
     def get(self, request):
         user = request.user
-        notifications = Notification.objects.filter(user=user).order_by('-timestamp')
+        notifications = Notification.objects.filter(recipient=user).order_by('-timestamp')
         serializer = NotificationSerializer(notifications, many=True)
         return Response(serializer.data)
-    
+
 class MarkAllNotificationsReadView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         user = request.user
-        Notification.objects.filter(user=user, is_read=False).update(is_read=True)
-        return Response({"message": "All notifications marked as read."}, status=status.HTTP_200_OK) 
-
+        Notification.objects.filter(recipient=user, is_read=False).update(is_read=True)
+        return Response({"message": "All notifications marked as read."}, status=status.HTTP_200_OK)
 # ------------------- Invitations (QR) ----------------------
 
 class InvitationListView(generics.ListAPIView):

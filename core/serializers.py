@@ -83,10 +83,14 @@ class MessageSerializer(serializers.ModelSerializer):
         fields = ['id', 'sender', 'receiver', 'content', 'timestamp', 'is_read']
 
 class NotificationSerializer(serializers.ModelSerializer):
+    sender_id = serializers.IntegerField(source='sender.id', read_only=True)
+    sender_name = serializers.CharField(source='sender.username', read_only=True)
+    recipient_id = serializers.IntegerField(source='recipient.id', read_only=True)
+    recipient_name = serializers.CharField(source='recipient.username', read_only=True)
+
     class Meta:
         model = Notification
-        fields = ['id', 'type', 'content', 'is_read', 'timestamp']
-
+        fields = ['id', 'type', 'content', 'is_read', 'timestamp', 'sender_id', 'sender_name', 'recipient_id', 'recipient_name']
 # -----------------------------
 # Events
 # -----------------------------
