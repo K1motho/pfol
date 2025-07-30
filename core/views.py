@@ -261,6 +261,8 @@ class AcceptFriendRequestView(APIView):
 
     def post(self, request):
         sender_id = request.data.get('sender_id')
+        print("➡️ AcceptFriendRequestView called with sender_id:", sender_id)
+
         if not sender_id:
             return Response({'error': 'Sender ID is required'}, status=400)
 
@@ -270,20 +272,33 @@ class AcceptFriendRequestView(APIView):
                 receiver=request.user,
                 status='pending'
             )
+
+            friend_request.status = 'accepted'
+            friend_request.save()
+
+            # ✅ Delete the original friend request notification
+            Notification.objects.filter(
+                recipient=request.user,
+                sender__id=sender_id,
+                type='friend_request'
+            ).delete()
+
+            # ✅ Create new notification for the sender
+            Notification.objects.create(
+                recipient=friend_request.sender,
+                sender=request.user,
+                type='friend_request_accepted',
+                content=f"{request.user.username} accepted your friend request."
+            )
+
+            return Response({'message': 'Friend request accepted'}, status=200)
+
         except FriendRequest.DoesNotExist:
             return Response({'error': 'Friend request not found'}, status=404)
 
-        friend_request.status = 'accepted'
-        friend_request.save()
-
-        # Optionally create reverse relationship or friendship object
-        Notification.objects.create(
-            user=friend_request.sender,
-            type='friend_request_accepted',
-            content=f"{request.user.username} accepted your friend request."
-        )
-
-        return Response({'message': 'Friend request accepted'}, status=200)
+        except Exception as e:
+            print("🔥 Error in AcceptFriendRequestView:", str(e))
+            return Response({'error': str(e)}, status=500)
 
 
 class RejectFriendRequestView(APIView):
@@ -291,6 +306,8 @@ class RejectFriendRequestView(APIView):
 
     def post(self, request):
         sender_id = request.data.get('sender_id')
+        print("➡️ RejectFriendRequestView called with sender_id:", sender_id)
+
         if not sender_id:
             return Response({'error': 'Sender ID is required'}, status=400)
 
@@ -300,13 +317,25 @@ class RejectFriendRequestView(APIView):
                 receiver=request.user,
                 status='pending'
             )
+
+            friend_request.status = 'rejected'
+            friend_request.save()
+
+            # ✅ Delete the original friend request notification
+            Notification.objects.filter(
+                recipient=request.user,
+                sender__id=sender_id,
+                type='friend_request'
+            ).delete()
+
+            return Response({'message': 'Friend request rejected'}, status=200)
+
         except FriendRequest.DoesNotExist:
             return Response({'error': 'Friend request not found'}, status=404)
 
-        friend_request.status = 'rejected'
-        friend_request.save()
-
-        return Response({'message': 'Friend request rejected'}, status=200)
+        except Exception as e:
+            print("🔥 Error in RejectFriendRequestView:", str(e))
+            return Response({'error': str(e)}, status=500)
 
 # ------------------- Friends and Invitations ----------------------
 
