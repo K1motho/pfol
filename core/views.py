@@ -273,17 +273,20 @@ class AcceptFriendRequestView(APIView):
                 status='pending'
             )
 
-            friend_request.status = 'accepted'
-            friend_request.save()
+            # Create friendship both ways or however your model works
+            Friendship.objects.create(user1=friend_request.sender, user2=request.user)
 
-            # ✅ Delete the original friend request notification
+            # Delete friend request after creating friendship
+            friend_request.delete()
+
+            # Delete original friend request notification
             Notification.objects.filter(
                 recipient=request.user,
                 sender__id=sender_id,
                 type='friend_request'
             ).delete()
 
-            # ✅ Create new notification for the sender
+            # Create notification to inform sender
             Notification.objects.create(
                 recipient=friend_request.sender,
                 sender=request.user,
@@ -299,7 +302,6 @@ class AcceptFriendRequestView(APIView):
         except Exception as e:
             print("🔥 Error in AcceptFriendRequestView:", str(e))
             return Response({'error': str(e)}, status=500)
-
 
 class RejectFriendRequestView(APIView):
     permission_classes = [IsAuthenticated]
@@ -318,10 +320,10 @@ class RejectFriendRequestView(APIView):
                 status='pending'
             )
 
-            friend_request.status = 'rejected'
-            friend_request.save()
+            # Delete the friend request entirely
+            friend_request.delete()
 
-            # ✅ Delete the original friend request notification
+            # Delete the original friend request notification
             Notification.objects.filter(
                 recipient=request.user,
                 sender__id=sender_id,
@@ -512,6 +514,11 @@ class InvitationCreateView(generics.CreateAPIView):
 
 class AttendedEventCreateView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        events = AttendedEvent.objects.filter(user=request.user).order_by('-attended_at')
+        serializer = AttendedEventSerializer(events, many=True)
+        return Response(serializer.data)
 
     def post(self, request):
         data = request.data.copy()

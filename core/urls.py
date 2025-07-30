@@ -22,7 +22,8 @@ from .views import (
     FriendDeleteAPIView,
     LoginView,MarkAllNotificationsReadView,
     AcceptFriendRequestView,
-    RejectFriendRequestView,
+    RejectFriendRequestView, FriendDeleteAPIView
+
 )
 
 urlpatterns = [
@@ -47,8 +48,8 @@ urlpatterns = [
     path('friends/<int:friend_id>/', FriendProfileAPIView.as_view(), name='friend-profile'),
     path('friend-requests/', SendFriendRequestView.as_view(), name='send-friend-request'),
     path('friend-requests/<int:receiver_id>/', SendFriendRequestView.as_view(), name='cancel_friend_request'),
-     path('friend-requests/accept/', AcceptFriendRequestView.as_view(), name='accept-friend-request'),
-     path('friend-requests/reject/', RejectFriendRequestView.as_view(), name='reject-friend-request'),
+    path('friend-requests/accept/', AcceptFriendRequestView.as_view(), name='accept-friend-request'),
+    path('friend-requests/reject/', RejectFriendRequestView.as_view(), name='reject-friend-request'),
     path('friends/delete/<int:friend_id>/', FriendDeleteAPIView.as_view(), name='friend-delete'),
 
     # User Search
