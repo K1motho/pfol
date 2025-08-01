@@ -22,7 +22,7 @@ from .views import (
     FriendDeleteAPIView,
     LoginView,MarkAllNotificationsReadView,
     AcceptFriendRequestView,
-    RejectFriendRequestView, FriendDeleteAPIView
+    RejectFriendRequestView, FriendDeleteAPIView, TicketmasterProxyView, TicketmasterEventDetailProxyView
 
 )
 
@@ -69,4 +69,8 @@ urlpatterns = [
 
     # Attended Events
     path('attended-events/', AttendedEventCreateView.as_view(), name='attended-events'),
+
+    #source events
+    path('ticketmaster/', TicketmasterProxyView.as_view(), name='ticketmaster-proxy'),
+    path('ticketmaster/<str:event_id>/', TicketmasterEventDetailProxyView.as_view(), name='ticketmaster-event-detail'),
 ]

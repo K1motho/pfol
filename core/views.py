@@ -1,4 +1,5 @@
 import requests
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from decouple import config
 from rest_framework import generics, permissions, status
 from rest_framework.views import APIView
@@ -12,10 +13,9 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
-
+from django.conf import settings
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
-
 from .serializers import (
     RegisterSerializer,
     UserSerializer,
@@ -549,3 +549,58 @@ class FriendDeleteAPIView(APIView):
 
         friendship.delete()
         return Response({"message": "Friend removed"}, status=204)
+
+
+# # sourcing events 
+class TicketmasterProxyView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [AnonRateThrottle, UserRateThrottle]  # Add throttling here
+
+    def get(self, request):
+        params = {
+            "apikey": settings.TICKETMASTER_API_KEY,
+            "keyword": request.GET.get("keyword", ""),
+            "city": request.GET.get("city", ""),
+            "page": request.GET.get("page", 0),
+            "size": request.GET.get("size", 10),
+            "sort": request.GET.get("sort", "date,asc")
+        }
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/115.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://app.ticketmaster.com/",
+            "Origin": "https://app.ticketmaster.com",
+        }
+        try:
+            response = requests.get(settings.TICKETMASTER_API_URL, params=params, headers=headers)
+            return Response(response.json(), status=response.status_code)
+        except requests.exceptions.RequestException as e:
+            return Response({"error": "Failed to fetch data from Ticketmaster.", "details": str(e)}, status=500)
+
+
+class TicketmasterEventDetailProxyView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [AnonRateThrottle, UserRateThrottle]  # Add throttling here
+
+    def get(self, request, event_id):
+        url = f"{settings.TICKETMASTER_API_URL.rstrip('/')}/{event_id}.json"
+        params = {
+            "apikey": settings.TICKETMASTER_API_KEY,
+        }
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/115.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://app.ticketmaster.com/",
+            "Origin": "https://app.ticketmaster.com",
+        }
+        try:
+            response = requests.get(url, params=params, headers=headers)
+            return Response(response.json(), status=response.status_code)
+        except requests.exceptions.RequestException as e:
+            return Response({"error": "Failed to fetch event details.", "details": str(e)}, status=500)
